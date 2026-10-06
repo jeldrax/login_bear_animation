@@ -1,7 +1,7 @@
+import 'dart:async'; //3.1 importar el timer para el delay de la animacion(de detenga un tiempo y luego cambie de estado)
+
 import 'package:flutter/material.dart';
 import 'package:rive/rive.dart';
-
-import 'dart:async'; //3.1 importar el timer para el delay de la animacion(de detenga un tiempo y luego cambie de estado)
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,6 +12,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _obscureText = true;
+
+  // Variables para ADA 9: Remember Me y Control Anti-Spam
+  bool _rememberMe = false;
+  bool _isAnimatingToggle = false; // Bandera para bloquear toques rápidos
+  Timer? _toggleLockTimer; // Timer para liberar el bloqueo tras la animación
 
   //1.1 Crear el cerebro de la animacion
   StateMachineController? _controller;
@@ -82,6 +87,38 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       _trigFail?.fire();
     }
+  }
+
+  // Función para manejar la interacción de Remember Me evitando Spam Clicks
+  void _onToggleRememberMe(bool? value) {
+    // Si la animación está corriendo, ignoramos los clics
+    if (_isAnimatingToggle) return;
+
+    setState(() {
+      _isAnimatingToggle = true; // Bloquear interacción inmediatamente
+      _rememberMe = value ?? false;
+    });
+
+    // Reacción visual del oso
+    FocusScope.of(context).unfocus();
+    _isHandsUp?.change(false);
+    _isChecking?.change(true);
+    _numLook?.value = 50.0;
+
+    _typingDebunce?.cancel();
+    _typingDebunce = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      _isChecking?.change(false);
+    });
+
+    // Simular tiempo de animación para liberar el bloqueo anti-spam
+    _toggleLockTimer?.cancel();
+    _toggleLockTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      setState(() {
+        _isAnimatingToggle = false; // Liberar bloqueo
+      });
+    });
   }
 
   //2.2 listeners(oyente/chismosos)
@@ -241,15 +278,42 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 SizedBox(height: 10),
-                //
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: const Text(
-                    'Forgot Password?',
-                    style: TextStyle(decoration: TextDecoration.underline),
-                  ),
+
+                // Fila con Remember Me y Forgot Password
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // AbsorbPointer absorbe los toques mientras _isAnimatingToggle sea true (Anti-Spam)
+                    AbsorbPointer(
+                      absorbing: _isAnimatingToggle,
+                      child: GestureDetector(
+                        onTap: () => _onToggleRememberMe(!_rememberMe),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              activeColor: Colors.pinkAccent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              onChanged: _onToggleRememberMe,
+                            ),
+                            const Text('Remember me'),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        decoration: TextDecoration.underline,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
+
                 //boton de login
                 MaterialButton(
                   minWidth: size.width,
@@ -301,6 +365,8 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailFocus.dispose();
     _passwordFocus.dispose();
     _typingDebunce?.cancel(); //3.9 eliminar el timer
+    _toggleLockTimer?.cancel(); // Liberar memoria del timer anti-spam
+    _controller?.dispose();
     super.dispose();
   }
 }
